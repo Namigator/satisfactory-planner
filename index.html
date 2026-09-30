@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Satisfactory Planner</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f39a3c'/><path d='M8 22V10h6l4 6 4-6h2v12h-4v-6l-3 4h-2l-3-4v6z' fill='%231a1d23'/></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <span>Satisfactory Planner</span>
+    </div>
+    <div class="segmented view-switch" id="view-switch">
+      <button data-view="planner">Planner</button>
+      <button data-view="map">World map</button>
+    </div>
+    <nav id="factory-tabs" class="factory-tabs" aria-label="Factories"></nav>
+    <div class="top-actions">
+      <button id="btn-share" class="btn ghost" title="Copy a link to this factory">Share link</button>
+      <button id="btn-export" class="btn ghost" title="Download all factories as JSON">Export</button>
+      <label class="btn ghost" title="Load factories from a JSON export">Import<input id="file-import" type="file" accept=".json,application/json" hidden></label>
+    </div>
+  </header>
+
+  <main class="layout" id="planner-view">
+    <aside class="sidebar">
+      <section class="panel" id="power-panel" hidden>
+        <div class="panel-head"><h2>Power plant</h2></div>
+        <div class="segmented" id="power-goal">
+          <button data-goal="target">Target MW</button>
+          <button data-goal="max">Max from inputs</button>
+        </div>
+        <label class="power-mw" id="power-mw-row">Generate <input id="power-mw" type="number" class="num" min="0" step="any"> MW</label>
+        <p class="hint" id="power-goal-hint"></p>
+        <h3 class="power-sub">Generators and fuels</h3>
+        <div id="power-gens" class="power-gens"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2 id="targets-title">Products</h2>
+          <button id="add-target" class="btn small">+ Add</button>
+        </div>
+        <p class="hint" id="targets-hint">What this factory should output, per minute.</p>
+        <div id="targets" class="rows"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Available inputs</h2>
+          <button id="add-input" class="btn small">+ Add</button>
+        </div>
+        <p class="hint" id="inputs-hint">Items you already have (e.g. from another factory). Used before producing more.</p>
+        <div id="inputs" class="rows"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Optimize for</h2></div>
+        <div class="segmented" id="mode">
+          <button data-mode="resources">Resources</button>
+          <button data-mode="power">Power</button>
+          <button data-mode="buildings">Buildings</button>
+        </div>
+        <p class="hint" id="mode-hint"></p>
+      </section>
+
+      <details class="panel" id="limits-panel">
+        <summary><h2>Resource limits</h2><span class="badge" id="limits-count"></span></summary>
+        <p class="hint">Cap raw resource use (per minute). Leave blank for no limit.</p>
+        <div id="limits" class="limits"></div>
+      </details>
+    </aside>
+
+    <section class="content">
+      <nav class="tabs" id="tabs" role="tablist">
+        <button data-tab="overview" role="tab">Overview</button>
+        <button data-tab="production" role="tab">Production</button>
+        <button data-tab="graph" role="tab">Graph</button>
+        <button data-tab="floor" role="tab">Floor plan</button>
+        <button data-tab="recipes" role="tab">Recipes <span class="badge" id="recipe-count"></span></button>
+      </nav>
+      <div id="status" class="status" hidden></div>
+      <div class="tab-panel" data-panel="overview" id="overview"></div>
+      <div class="tab-panel" data-panel="production" id="production"></div>
+      <div class="tab-panel" data-panel="graph">
+        <div class="graph-toolbar">
+          <button id="graph-fit" class="btn small">Fit to view</button>
+          <label class="check"><input type="checkbox" id="graph-labels" checked> Edge labels</label>
+          <span class="hint">Scroll to zoom, drag to pan, hover a node to trace its flows.</span>
+        </div>
+        <div id="graph" class="graph"></div>
+      </div>
+      <div class="tab-panel" data-panel="floor">
+        <div class="graph-toolbar fp-toolbar">
+          <div class="segmented fp-floors" id="fp-floors"></div>
+          <span class="sep"></span>
+          <label class="check">Auto-layout on
+            <select id="fp-auto-floors"><option value="1">1 floor</option><option value="2">2 floors</option><option value="3">3 floors</option><option value="4">4 floors</option></select>
+          </label>
+          <button id="fp-auto" class="btn small">Re-arrange</button>
+          <span class="sep"></span>
+          <label class="check">Show
+            <select id="fp-overlay">
+              <option value="none">no other floors</option>
+              <option value="below">floor below</option>
+              <option value="above">floor above</option>
+              <option value="both">floors below + above</option>
+            </select>
+          </label>
+          <span class="sep"></span>
+          <button id="fp-shape" class="btn small">Edit floor shape</button>
+          <span id="fp-shape-tools" class="fp-shape-tools" hidden>
+            <span class="segmented" id="fp-brush"><button data-brush="add" class="active">Add</button><button data-brush="remove">Remove</button></span>
+            <button id="fp-shape-copy" class="btn small ghost" title="Copy the shape of the floor below">Copy floor below</button>
+            <button id="fp-shape-auto" class="btn small ghost" title="Back to the automatic rectangle around the rows">Auto shape</button>
+          </span>
+          <button id="fp-fit" class="btn small ghost">Fit to view</button>
+        </div>
+        <div class="fp-hint hint" id="fp-hint">Grid: 8 m foundations. Each row is a manifold: inputs enter on one side, outputs leave on the other. Right-drag to pan.</div>
+        <div class="fp-body">
+          <div id="floorplan" class="graph fp-canvas"></div>
+          <div id="fp-empty" class="fp-empty" hidden>Solve a plan first: add a product in the sidebar.</div>
+          <aside id="fp-side" class="side-panel"></aside>
+        </div>
+      </div>
+      <div class="tab-panel" data-panel="recipes" id="recipes">
+        <div class="recipe-toolbar">
+          <input id="recipe-search" type="search" placeholder="Search recipes, items, buildings…">
+          <select id="recipe-filter">
+            <option value="all">All recipes</option>
+            <option value="alt">Alternates</option>
+            <option value="std">Standard</option>
+            <option value="on">Enabled</option>
+            <option value="off">Disabled</option>
+            <option value="used">Used in this plan</option>
+          </select>
+          <div class="spacer"></div>
+          <button class="btn small" id="alts-on">Enable all alternates</button>
+          <button class="btn small" id="alts-off">Disable all alternates</button>
+          <button class="btn small ghost" id="recipes-reset">Reset to defaults</button>
+        </div>
+        <p class="hint">Enabled recipes are shared by all factories; enable the alternates you have unlocked and the optimizer picks the best mix.</p>
+        <div id="recipe-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <main class="map-view" id="map-view" hidden>
+    <div class="map-wrap">
+      <div id="worldmap" class="worldmap"></div>
+      <div class="map-controls">
+        <button id="map-fit" class="btn small">Fit map</button>
+        <div id="map-tools" class="map-tools" role="toolbar" aria-label="Map tools"></div>
+      </div>
+    </div>
+    <aside id="map-side" class="side-panel"></aside>
+  </main>
+
+  <dialog id="alt-dialog" class="dialog">
+    <form method="dialog">
+      <div class="dialog-head">
+        <h3 id="alt-title"></h3>
+        <button class="btn ghost small" value="close" aria-label="Close">✕</button>
+      </div>
+      <p class="hint">Enabled recipes for this item. The optimizer chooses among them; disable one to force another.</p>
+      <div id="alt-list"></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/mapdata.js"></script>
+  <script src="js/solver.js"></script>
+  <script src="js/transport.js"></script>
+  <script src="js/graph.js"></script>
+  <script src="js/layout.js"></script>
+  <script src="js/worldmap.js"></script>
+  <script src="js/rail.js"></script>
+  <script src="js/power.js"></script>
+  <script src="js/floorview.js"></script>
+  <script src="js/trainview.js"></script>
+  <script src="js/mapview.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
